@@ -13,10 +13,12 @@ func Middleware(keyFn KeyFn, rate time.Duration, burst int) func(http.Handler) h
 		burst = 1
 	}
 	l := inMemoryRateLimiter{
-		rate:    rate,
-		keyFn:   keyFn,
-		burst:   burst,
-		buckets: map[string]chan token{},
+		rate:        rate,
+		keyFn:       keyFn,
+		burst:       burst,
+		buckets:     map[string]chan token{},
+		rateHeader:  fmt.Sprintf("%v req/min", int(time.Minute/rate)),
+		resetHeader: fmt.Sprintf("%v", time.Now().Unix()),
 	}
 	go l.Run()
 
@@ -30,16 +32,19 @@ func Middleware(keyFn KeyFn, rate time.Duration, burst int) func(http.Handler) h
 type token struct{}
 
 type inMemoryRateLimiter struct {
-	next    http.Handler
-	keyFn   KeyFn
-	rate    time.Duration
-	burst   int
-	buckets map[string]chan token
+	next        http.Handler
+	keyFn       KeyFn
+	rate        time.Duration
+	burst       int
+	buckets     map[string]chan token
+	rateHeader  string
+	resetHeader string
 }
 
 func (l *inMemoryRateLimiter) Run() {
 	tick := time.NewTicker(l.rate)
-	for range tick.C {
+	for t := range tick.C {
+		l.resetHeader = fmt.Sprintf("%v", t.Add(l.rate).Unix())
 		for key, bucket := range l.buckets {
 			select {
 			case <-bucket:
@@ -60,10 +65,11 @@ func (l *inMemoryRateLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	select {
 	case bucket <- token{}:
-		w.Header().Set("X-RateLimit-Key", fmt.Sprintf("%v", key))
-		w.Header().Set("X-RateLimit-Rate", fmt.Sprintf("%v req/min", int(time.Minute/l.rate)))
-		w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%v", cap(bucket)))
-		w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%v", cap(bucket)-len(bucket)))
+		w.Header().Add("X-RateLimit-Key", key)
+		w.Header().Add("X-RateLimit-Rate", l.rateHeader)
+		w.Header().Add("X-RateLimit-Limit", fmt.Sprintf("%v", cap(bucket)))
+		w.Header().Add("X-RateLimit-Remaining", fmt.Sprintf("%v", cap(bucket)-len(bucket)))
+		w.Header().Add("X-RateLimit-Reset", l.resetHeader)
 		l.next.ServeHTTP(w, r)
 	default:
 		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
