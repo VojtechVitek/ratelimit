@@ -8,23 +8,24 @@ import (
 type token struct{}
 
 type memoryStore struct {
-	sync.Mutex    // guards buckets
-	buckets       map[string]chan token
-	bucketLen     int
-	resetUnixTime int64
+	sync.Mutex // guards buckets
+	buckets    map[string]chan token
+	bucketLen  int
+	reset      time.Time
 }
 
-func MemoryStore(rate time.Duration, burst int) *memoryStore {
+func InMemory(rate int, window time.Duration) *memoryStore {
 	s := memoryStore{
-		buckets:       map[string]chan token{},
-		bucketLen:     burst,
-		resetUnixTime: time.Now().Unix(),
+		buckets:   map[string]chan token{},
+		bucketLen: rate,
+		reset:     time.Now(),
 	}
 	go func() {
-		tick := time.NewTicker(rate)
+		interval := time.Duration(int(window) / rate)
+		tick := time.NewTicker(interval)
 		for t := range tick.C {
 			s.Lock()
-			s.resetUnixTime = t.Add(rate).Unix()
+			s.reset = t.Add(interval)
 			for key, bucket := range s.buckets {
 				select {
 				case <-bucket:
@@ -38,7 +39,8 @@ func MemoryStore(rate time.Duration, burst int) *memoryStore {
 	return &s
 }
 
-func (s *memoryStore) Take(key string) (bool, int, int64, error) {
+// Take implements TokenBucketStore interface.
+func (s *memoryStore) Take(key string) (bool, int, error) {
 	s.Lock()
 	bucket, ok := s.buckets[key]
 	if !ok {
@@ -48,8 +50,12 @@ func (s *memoryStore) Take(key string) (bool, int, int64, error) {
 	s.Unlock()
 	select {
 	case bucket <- token{}:
-		return true, cap(bucket) - len(bucket), s.resetUnixTime, nil
+		return true, cap(bucket) - len(bucket), nil
 	default:
-		return false, 0, s.resetUnixTime, nil
+		return false, 0, nil
 	}
+}
+
+func (s *memoryStore) ResetTime() time.Time {
+	return s.reset
 }
