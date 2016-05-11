@@ -1,12 +1,14 @@
-# Rate Limiter HTTP middleware
+# Rate Limit HTTP middleware
 [![GoDoc Widget]][GoDoc] [![Travis Widget]][Travis]
 
 [Golang](http://golang.org/) package for rate limiting HTTP endpoints based on context and request headers.
 
-[GoDoc]: https://godoc.org/VojtechVitek/ratelimiter
-[GoDoc Widget]: https://godoc.org/VojtechVitek/ratelimiter?status.svg
-[Travis]: https://travis-ci.org/VojtechVItek/ratelimiter
-[Travis Widget]: https://travis-ci.org/VojtechVItek/ratelimiter.svg?branch=master
+[GoDoc]: https://godoc.org/VojtechVitek/ratelimit
+[GoDoc Widget]: https://godoc.org/VojtechVitek/ratelimit?status.svg
+[Travis]: https://travis-ci.org/VojtechVItek/ratelimit
+[Travis Widget]: https://travis-ci.org/VojtechVItek/ratelimit.svg?branch=master
+
+** Under development **
 
 # Goals
 - Simple & fast
