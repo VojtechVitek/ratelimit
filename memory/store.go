@@ -1,4 +1,4 @@
-package ratelimit
+package memory
 
 import (
 	"sync"
@@ -7,19 +7,24 @@ import (
 
 type token struct{}
 
-type memoryStore struct {
+type bucketStore struct {
 	sync.Mutex // guards buckets
 	buckets    map[string]chan token
 	bucketLen  int
 	reset      time.Time
 }
 
-func InMemory(rate int, window time.Duration) *memoryStore {
-	s := memoryStore{
-		buckets:   map[string]chan token{},
-		bucketLen: rate,
-		reset:     time.Now(),
+// New creates new in-memory token bucket store.
+func New() *bucketStore {
+	return &bucketStore{
+		buckets: map[string]chan token{},
 	}
+}
+
+func (s *bucketStore) InitRate(rate int, window time.Duration) {
+	s.bucketLen = rate
+	s.reset = time.Now()
+
 	go func() {
 		interval := time.Duration(int(window) / rate)
 		tick := time.NewTicker(interval)
@@ -36,11 +41,11 @@ func InMemory(rate int, window time.Duration) *memoryStore {
 			s.Unlock()
 		}
 	}()
-	return &s
 }
 
-// Take implements TokenBucketStore interface.
-func (s *memoryStore) Take(key string) (bool, int, error) {
+// Take implements TokenBucketStore interface. It takes token from a bucket
+// referenced by a given key, if available.
+func (s *bucketStore) Take(key string) (bool, int, error) {
 	s.Lock()
 	bucket, ok := s.buckets[key]
 	if !ok {
@@ -56,6 +61,6 @@ func (s *memoryStore) Take(key string) (bool, int, error) {
 	}
 }
 
-func (s *memoryStore) ResetTime() time.Time {
+func (s *bucketStore) ResetTime() time.Time {
 	return s.reset
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// IP is a function returning unique key per IP.
 func IP(r *http.Request) string {
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {

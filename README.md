@@ -8,12 +8,11 @@
 [Travis]: https://travis-ci.org/VojtechVItek/ratelimit
 [Travis Widget]: https://travis-ci.org/VojtechVItek/ratelimit.svg?branch=master
 
-** Under development **
+**Under development**
 
 # Goals
 - Simple & fast
-- Storage-independent (Redis or any other Key-Value store)
-- In-memory storage fallback
+- Storage independent (Redis, In-Memory or any other K/V store)
 
 # License
 
