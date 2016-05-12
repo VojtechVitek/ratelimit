@@ -3,15 +3,16 @@
 
 [Golang](http://golang.org/) package for rate limiting HTTP endpoints based on context and request headers.
 
-[GoDoc]: https://godoc.org/VojtechVitek/ratelimit
-[GoDoc Widget]: https://godoc.org/VojtechVitek/ratelimit?status.svg
-[Travis]: https://travis-ci.org/VojtechVItek/ratelimit
-[Travis Widget]: https://travis-ci.org/VojtechVItek/ratelimit.svg?branch=master
+[GoDoc]: https://godoc.org/github.com/VojtechVitek/ratelimit
+[GoDoc Widget]: https://godoc.org/github.com/VojtechVitek/ratelimit?status.svg
+[Travis]: https://travis-ci.org/VojtechVitek/ratelimit
+[Travis Widget]: https://travis-ci.org/VojtechVitek/ratelimit.svg?branch=master
 
-**Under development**
+# Under development
 
 # Goals
-- Simple & fast
+- Simple but powerful API
+- Token Bucket algorithm (rate + burst)
 - Storage independent (Redis, In-Memory or any other K/V store)
 
 # License
