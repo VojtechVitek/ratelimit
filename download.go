@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-func Download() *downloadBuilder {
+func DownloadSpeed(keyFn KeyFn) *downloadBuilder {
 	return &downloadBuilder{
-	//keyFn: keyFn,
+		keyFn: keyFn,
 	}
 }
 
@@ -23,9 +23,10 @@ func (b *downloadBuilder) Rate(rate int, window time.Duration) *downloadBuilder 
 	return b
 }
 
-// func (b *downloadBuilder) Burst(burst int) *downloadBuilder {
+// TODO: Custom burst?
+// func (b *downloadBuilder) Burst(burst int) *downloadBuilder {}
 
-func (b *downloadBuilder) LimitStore(store TokenBucketStore, fallbackStores ...TokenBucketStore) func(http.Handler) http.Handler {
+func (b *downloadBuilder) LimitBy(store TokenBucketStore, fallbackStores ...TokenBucketStore) func(http.Handler) http.Handler {
 	store.InitRate(b.rate, b.window)
 	for _, store := range fallbackStores {
 		store.InitRate(b.rate, b.window)
@@ -42,7 +43,7 @@ func (b *downloadBuilder) LimitStore(store TokenBucketStore, fallbackStores ...T
 			lw := &limitWriter{
 				ResponseWriter:  w,
 				downloadLimiter: &downloadLimiter,
-				canWrite:        0, //int64(b.rate),
+				canWrite:        0,
 			}
 
 			next.ServeHTTP(lw, r)

@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-func Request(keyFn KeyFn) *builder {
-	return &builder{
+func Request(keyFn KeyFn) *requestBuilder {
+	return &requestBuilder{
 		keyFn: keyFn,
 	}
 }
 
-type builder struct {
+type requestBuilder struct {
 	keyFn       KeyFn
 	rate        int
 	window      time.Duration
@@ -20,7 +20,7 @@ type builder struct {
 	resetHeader string
 }
 
-func (b *builder) Rate(rate int, window time.Duration) *builder {
+func (b *requestBuilder) Rate(rate int, window time.Duration) *requestBuilder {
 	b.rate = rate
 	b.window = window
 	b.rateHeader = fmt.Sprintf("%d req/min", rate*int(window/time.Minute))
@@ -28,16 +28,17 @@ func (b *builder) Rate(rate int, window time.Duration) *builder {
 	return b
 }
 
-// func (b *builder) Burst(burst int) *builder {
+// TODO: Custom burst?
+// func (b *requestBuilder) Burst(burst int) *requestBuilder {}
 
-func (b *builder) LimitStore(store TokenBucketStore, fallbackStores ...TokenBucketStore) func(http.Handler) http.Handler {
+func (b *requestBuilder) LimitBy(store TokenBucketStore, fallbackStores ...TokenBucketStore) func(http.Handler) http.Handler {
 	store.InitRate(b.rate, b.window)
 	for _, store := range fallbackStores {
 		store.InitRate(b.rate, b.window)
 	}
 
 	limiter := requestLimiter{
-		builder:        b,
+		requestBuilder: b,
 		store:          store,
 		fallbackStores: fallbackStores,
 	}
@@ -51,7 +52,7 @@ func (b *builder) LimitStore(store TokenBucketStore, fallbackStores ...TokenBuck
 }
 
 type requestLimiter struct {
-	*builder
+	*requestBuilder
 
 	next           http.Handler
 	store          TokenBucketStore
