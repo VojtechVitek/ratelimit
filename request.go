@@ -23,7 +23,7 @@ type requestBuilder struct {
 func (b *requestBuilder) Rate(rate int, window time.Duration) *requestBuilder {
 	b.rate = rate
 	b.window = window
-	b.rateHeader = fmt.Sprintf("%d req/min", rate*int(window/time.Minute))
+	b.rateHeader = fmt.Sprintf("%v", float32(rate)*float32(window/time.Second))
 	b.resetHeader = fmt.Sprintf("%d", time.Now().Unix())
 	return b
 }
@@ -67,23 +67,21 @@ func (l *requestLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok, remaining, err := l.store.Take("request:" + key)
+	ok, remaining, reset, err := l.store.Take("request:" + key)
 	if err != nil {
 		for _, store := range l.fallbackStores {
-			ok, remaining, err = store.Take("request:" + key)
+			ok, remaining, reset, err = store.Take("request:" + key)
 			if err == nil {
 				break
 			}
 		}
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
-			return
-		}
+	}
+	if err != nil {
+		l.next.ServeHTTP(w, r)
+		return
 	}
 	if !ok {
-		if s, ok := l.store.(HasResetTime); ok {
-			w.Header().Add("Retry-After", s.ResetTime().Format(http.TimeFormat))
-		}
+		w.Header().Add("Retry-After", reset.Format(http.TimeFormat))
 		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
 		return
 	}
@@ -91,10 +89,7 @@ func (l *requestLimiter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("X-RateLimit-Rate", l.rateHeader)
 	w.Header().Add("X-RateLimit-Limit", fmt.Sprintf("%d", l.rate))
 	w.Header().Add("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
-	if s, ok := l.store.(HasResetTime); ok {
-		t := s.ResetTime()
-		w.Header().Add("X-RateLimit-Reset", fmt.Sprintf("%d", t.Unix()))
-		w.Header().Add("Retry-After", t.Format(http.TimeFormat))
-	}
+	w.Header().Add("X-RateLimit-Reset", fmt.Sprintf("%d", reset.Unix()))
+	w.Header().Add("Retry-After", reset.Format(http.TimeFormat))
 	l.next.ServeHTTP(w, r)
 }

@@ -32,19 +32,19 @@ func (s *bucketStore) InitRate(rate int, window time.Duration) {
 
 // Take implements TokenBucketStore interface. It takes token from a bucket
 // referenced by a given key, if available.
-func (s *bucketStore) Take(key string) (bool, int, error) {
+func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
 	c := s.pool.Get()
 	defer c.Close()
 
 	// Number of tokens in the bucket.
 	bucketLen, err := redis.Int(c.Do("LLEN", PrefixKey+key))
 	if err != nil {
-		return false, 0, err
+		return false, 0, time.Time{}, err
 	}
 
 	// Bucket is full.
 	if bucketLen >= s.rate {
-		return false, 0, nil
+		return false, 0, time.Time{}, nil
 	}
 
 	if bucketLen > 0 {
@@ -55,11 +55,11 @@ func (s *bucketStore) Take(key string) (bool, int, error) {
 		c.Send("RPUSHX", PrefixKey+key, "")
 		reply, err := redis.Ints(c.Do("EXEC"))
 		if err != nil {
-			return false, 0, err
+			return false, 0, time.Time{}, err
 		}
 		bucketLen = reply[0]
 		if bucketLen > 0 {
-			return true, s.rate - bucketLen - 1, nil
+			return true, s.rate - bucketLen - 1, time.Time{}, nil
 		}
 	}
 
@@ -67,23 +67,8 @@ func (s *bucketStore) Take(key string) (bool, int, error) {
 	c.Send("RPUSH", PrefixKey+key, "")
 	c.Send("EXPIRE", PrefixKey+key, s.windowSeconds)
 	if _, err := c.Do("EXEC"); err != nil {
-		return false, 0, err
+		return false, 0, time.Time{}, err
 	}
 
-	return true, s.rate - bucketLen - 1, nil
-}
-
-// TODO: Make this return value of Take(key) instead.
-// TODO: Return int (remaining seconds) to prevent time-sync issues?
-func (s *bucketStore) ResetTime() time.Time {
-	c := s.pool.Get()
-	defer c.Close()
-
-	// TODO: Doesn't really work without given key.
-	ttl, err := redis.Int(c.Do("TTL", PrefixKey+"key"))
-	if err != nil || ttl < 0 {
-		return time.Now()
-	}
-
-	return time.Now().Add(time.Duration(ttl) * time.Second)
+	return true, s.rate - bucketLen - 1, time.Time{}, nil
 }

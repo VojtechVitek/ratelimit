@@ -45,7 +45,7 @@ func (s *bucketStore) InitRate(rate int, window time.Duration) {
 
 // Take implements TokenBucketStore interface. It takes token from a bucket
 // referenced by a given key, if available.
-func (s *bucketStore) Take(key string) (bool, int, error) {
+func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
 	s.Lock()
 	bucket, ok := s.buckets[key]
 	if !ok {
@@ -55,12 +55,8 @@ func (s *bucketStore) Take(key string) (bool, int, error) {
 	s.Unlock()
 	select {
 	case bucket <- token{}:
-		return true, cap(bucket) - len(bucket), nil
+		return true, cap(bucket) - len(bucket), s.reset, nil
 	default:
-		return false, 0, nil
+		return false, 0, s.reset, nil
 	}
-}
-
-func (s *bucketStore) ResetTime() time.Time {
-	return s.reset
 }
