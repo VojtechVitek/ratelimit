@@ -40,10 +40,16 @@ func (b *downloadBuilder) LimitBy(store TokenBucketStore, fallbackStores ...Toke
 
 	return func(next http.Handler) http.Handler {
 		fn := func(w http.ResponseWriter, r *http.Request) {
+			key := downloadLimiter.keyFn(r)
+			if key == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			lw := &limitWriter{
 				ResponseWriter:  w,
 				downloadLimiter: &downloadLimiter,
-				canWrite:        0,
+				key:             key,
 			}
 
 			next.ServeHTTP(lw, r)
@@ -63,6 +69,8 @@ type downloadLimiter struct {
 type limitWriter struct {
 	http.ResponseWriter
 	*downloadLimiter
+
+	key         string
 	wroteHeader bool
 	canWrite    int64
 }
@@ -71,7 +79,15 @@ func (w *limitWriter) Write(buf []byte) (int, error) {
 	total := 0
 	for {
 		if w.canWrite < 1024 {
-			ok, _, err := w.downloadLimiter.store.Take("download:" + "key")
+			ok, _, _, err := w.downloadLimiter.store.Take("download:" + w.key)
+			if err != nil {
+				for _, store := range w.fallbackStores {
+					ok, _, _, err = store.Take("download:" + w.key)
+					if err == nil {
+						break
+					}
+				}
+			}
 			if err != nil {
 				return total, err
 			}
