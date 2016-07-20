@@ -1,18 +1,25 @@
 package redis
 
 import (
+	"errors"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
 
-var PrefixKey = "ratelimit:"
+var (
+	PrefixKey    = "ratelimit:"
+	ErrUnhealthy = errors.New("redis is not healthy")
+)
+
+const skipOnUnhealthy = 1000
 
 type bucketStore struct {
 	pool *redis.Pool
 
 	rate          int
 	windowSeconds int
+	skip          int
 }
 
 // New creates new in-memory token bucket store.
@@ -33,12 +40,17 @@ func (s *bucketStore) InitRate(rate int, window time.Duration) {
 // Take implements TokenBucketStore interface. It takes token from a bucket
 // referenced by a given key, if available.
 func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
+	if s.skip > 0 {
+		s.skip--
+		return false, 0, time.Time{}, ErrUnhealthy
+	}
 	c := s.pool.Get()
 	defer c.Close()
 
 	// Number of tokens in the bucket.
 	bucketLen, err := redis.Int(c.Do("LLEN", PrefixKey+key))
 	if err != nil {
+		s.skip = skipOnUnhealthy
 		return false, 0, time.Time{}, err
 	}
 
@@ -55,6 +67,7 @@ func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
 		c.Send("RPUSHX", PrefixKey+key, "")
 		reply, err := redis.Ints(c.Do("EXEC"))
 		if err != nil {
+			s.skip = skipOnUnhealthy
 			return false, 0, time.Time{}, err
 		}
 		bucketLen = reply[0]
@@ -67,6 +80,7 @@ func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
 	c.Send("RPUSH", PrefixKey+key, "")
 	c.Send("EXPIRE", PrefixKey+key, s.windowSeconds)
 	if _, err := c.Do("EXEC"); err != nil {
+		s.skip = skipOnUnhealthy
 		return false, 0, time.Time{}, err
 	}
 
