@@ -8,8 +8,9 @@ import (
 )
 
 var (
-	PrefixKey    = "ratelimit:"
-	ErrUnhealthy = errors.New("redis is not healthy")
+	PrefixKey      = "ratelimit:"
+	ErrUnreachable = errors.New("redis is unreachable")
+	RetryAfter     = time.Second
 )
 
 const skipOnUnhealthy = 1000
@@ -19,7 +20,7 @@ type bucketStore struct {
 
 	rate          int
 	windowSeconds int
-	skip          int
+	retryAfter    *time.Time
 }
 
 // New creates new in-memory token bucket store.
@@ -40,9 +41,11 @@ func (s *bucketStore) InitRate(rate int, window time.Duration) {
 // Take implements TokenBucketStore interface. It takes token from a bucket
 // referenced by a given key, if available.
 func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
-	if s.skip > 0 {
-		s.skip--
-		return false, 0, time.Time{}, ErrUnhealthy
+	if s.retryAfter != nil {
+		if s.retryAfter.After(time.Now()) {
+			return false, 0, time.Time{}, ErrUnreachable
+		}
+		s.retryAfter = nil
 	}
 	c := s.pool.Get()
 	defer c.Close()
@@ -50,7 +53,8 @@ func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
 	// Number of tokens in the bucket.
 	bucketLen, err := redis.Int(c.Do("LLEN", PrefixKey+key))
 	if err != nil {
-		s.skip = skipOnUnhealthy
+		next := time.Now().Add(time.Second)
+		s.retryAfter = &next
 		return false, 0, time.Time{}, err
 	}
 
@@ -67,7 +71,8 @@ func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
 		c.Send("RPUSHX", PrefixKey+key, "")
 		reply, err := redis.Ints(c.Do("EXEC"))
 		if err != nil {
-			s.skip = skipOnUnhealthy
+			next := time.Now().Add(time.Second)
+			s.retryAfter = &next
 			return false, 0, time.Time{}, err
 		}
 		bucketLen = reply[0]
@@ -80,7 +85,8 @@ func (s *bucketStore) Take(key string) (bool, int, time.Time, error) {
 	c.Send("RPUSH", PrefixKey+key, "")
 	c.Send("EXPIRE", PrefixKey+key, s.windowSeconds)
 	if _, err := c.Do("EXEC"); err != nil {
-		s.skip = skipOnUnhealthy
+		next := time.Now().Add(time.Second)
+		s.retryAfter = &next
 		return false, 0, time.Time{}, err
 	}
 
