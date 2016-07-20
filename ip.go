@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// IP is a function returning unique key per IP.
-var IP = func(r *http.Request) string {
+// IP returns unique key per request IP.
+func IP(r *http.Request) string {
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		if i := strings.IndexAny(xff, ",;"); i != -1 {
@@ -19,4 +19,9 @@ var IP = func(r *http.Request) string {
 		ip += "," + xrip
 	}
 	return ip
+}
+
+// NOP returns empty key for each request.
+func NOP(r *http.Request) string {
+	return ""
 }
