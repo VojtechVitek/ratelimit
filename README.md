@@ -1,3 +1,9 @@
+# Archived
+
+## Please, see [github.com/go-chi/httprate](https://github.com/go-chi/httprate), which implements a much more efficient rate-limiting algorithm (sliding window) and is better suitable for production use.
+
+---
+
 # Rate Limit HTTP middleware
 [![GoDoc Widget]][GoDoc] [![Travis Widget]][Travis]
 
